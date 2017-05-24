@@ -23,23 +23,23 @@
 - name: unseal - Load the vault keys from the control machine
   set_fact:
     vault_unseal_keys: "{{ ( lookup('file', vault_keys_file_local) | from_json )['keys'] }}"
-  when: vault_sealed and ( vault_keys_file_local is defined ) and ( vault_unseal_keys is not defined )
+  when: vault_sealed and ( vault_keys_file_local is defined ) and ( vault_unseal_keys is not defined or vault_unseal_keys == "" )
 
 - name: unseal - Read the remote the vault keys
   slurp:
     src: "{{ vault_keys_file }}"
   register: remote_vault_keys
-  when: vault_sealed and ( vault_keys_file is defined ) and ( vault_unseal_keys is not defined )
+  when: vault_sealed and ( vault_keys_file is defined ) and ( vault_unseal_keys is not defined or vault_unseal_keys == "" )
 
 - name: unseal - Load the vault keys from the target machine
   set_fact:
     vault_unseal_keys: "{{ ( remote_vault_keys.content | b64decode | from_json )['keys'] }}"
-  when: vault_sealed and ( vault_keys_file is defined ) and ( vault_unseal_keys is not defined )
+  when: vault_sealed and ( vault_keys_file is defined ) and ( vault_unseal_keys is not defined or vault_unseal_keys == "" )
 
 - name: unseal - Ensure the vault unseal keys are available
   fail:
     msg: "vault_unseal_keys must be set"
-  when: vault_sealed and ( vault_unseal_keys is not defined )
+  when: vault_sealed and ( vault_unseal_keys is not defined or vault_unseal_keys == "" )
 
 - name: unseal - Unseal the vault
   uri:
