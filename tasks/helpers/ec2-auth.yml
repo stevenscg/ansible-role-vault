@@ -1,0 +1,44 @@
+---
+#
+# Ansible tasks for the vault role
+#
+# This helper uses the metadata provided by AWS EC2 to authenticate
+# against the vault ec2-auth auth backend.
+#
+# The helper assumes /etc/vault (vault_config_dir) is available.
+#
+
+- name: helper - Ensure the vault paths exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+  with_items:
+    - "{{ vault_config_dir }}"
+    - "{{ vault_helper_dir }}"
+
+- name: helper - Setup a client configuration file
+  template:
+    src: client.conf.j2
+    dest: "{{ vault_config_dir }}/client.conf"
+
+- name: helper - Ensure the ec2-auth helper script is installed
+  copy:
+    src: ec2-auth.sh
+    dest: "{{ vault_helper_dir }}"
+    owner: root
+    group: "{{ vault_users_group }}"
+    mode: 0755
+
+- name: helper - Run the ec2-auth helper script
+  shell: >
+    {{ vault_helper_dir }}/ec2-auth.sh
+
+#
+# This renews the token on a weekly basis or after a reboot
+#
+- name: helper - Setup the ec2-auth-helper cron job
+  template:
+    src: auth-helper.cron.j2
+    dest: "/etc/cron.d/ec2-auth-helper.cron"

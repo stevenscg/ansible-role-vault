@@ -1,0 +1,39 @@
+---
+#
+# Ansible tasks for the vault role
+#
+# This helper uses the file obtained during "init" step on
+# development or CI machines to place the root token into
+# a tmpfs path (/var/run/vault).
+#
+
+- name: helper - Ensure the vault helper path exists
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+  with_items:
+    - "{{ vault_helper_dir }}"
+
+- name: helper - Ensure the dev-auth helper script is installed
+  copy:
+    src: dev-auth.sh
+    dest: "{{ vault_helper_dir }}"
+    owner: root
+    group: "{{ vault_users_group }}"
+    mode: 0755
+
+- name: helper - Run the dev-auth helper script
+  shell: >
+    {{ vault_helper_dir }}/dev-auth.sh
+  args:
+    creates: /var/run/vault/instance_token
+
+#
+# This renews the token on a weekly basis or after a reboot
+#
+- name: helper - Setup the dev-auth-helper cron job
+  template:
+    src: auth-helper.cron.j2
+    dest: "/etc/cron.d/dev-auth-helper.cron"

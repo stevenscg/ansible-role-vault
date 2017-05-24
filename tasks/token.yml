@@ -1,0 +1,25 @@
+---
+#
+# Ansible tasks for the vault role
+#
+
+- name: token - Get the vault token from the local environment
+  set_fact:
+    vault_token: "{{ lookup('env', 'VAULT_TOKEN') }}"
+  when: ( vault_token is not defined )
+
+- name: token - Get the vault token from the local vault_keys_file
+  set_fact:
+    vault_token: "{{ ( lookup('file', vault_keys_file_local ) | from_json )['root_token'] }}"
+  when: ( vault_keys_file_local is defined ) and ( vault_token == '' or vault_token is not defined )
+
+- name: token - Read the remote vault_keys_file
+  slurp:
+    src: "{{ vault_keys_file }}"
+  register: remote_vault_keys
+  when: ( vault_keys_file is defined ) and ( vault_token == '' or vault_token is not defined )
+
+- name: token - Get the vault token from the remote vault_keys_file
+  set_fact:
+    vault_token: "{{ ( remote_vault_keys.content | b64decode | from_json )['root_token'] }}"
+  when: ( remote_vault_keys is defined ) and ( vault_token == '' or vault_token is not defined )

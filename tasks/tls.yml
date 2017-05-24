@@ -1,0 +1,89 @@
+---
+#
+# Ansible tasks for the vault role
+#
+
+- name: tls - Ensure the vault certs directory exists
+  file:
+    state: directory
+    path: "{{ item }}"
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+  with_items:
+    - "{{ vault_listener_tls_certs_dir }}"
+
+- name: tls - Issue the vault listener TLS certificate
+  uri:
+    url: "{{ vault_base_url }}/v1/pki/issue/vault"
+    method: POST
+    status_code: 200
+    return_content: yes
+    validate_certs: "{{ vault_api_validate_certs }}"
+    headers:
+      X-Vault-Token: "{{ vault_token }}"
+    body_format: json
+    body:
+      common_name: vault
+      ip_sans: "127.0.0.1,{{ ansible_default_ipv4['address'] }}"
+      alt_names: "vault,vault.service.consul,active.vault.service.consul,standby.vault.service.consul"
+      exclude_cn_from_sans: true
+      ttl: 8760h
+      format: pem
+  changed_when: true
+  register: vault_tls_issue_resp
+
+# This includes the intermediate ca certificate and expects that the root ca certificate
+# is part of the system trust store on all clients or is provided via "ca-path" arguments.
+# @see https://www.vaultproject.io/docs/config/index.html
+- name: tls - Create the vault listener TLS cert
+  copy:
+    content: "{{ vault_tls_issue_resp.json.data.certificate }}\n{{ vault_tls_issue_resp.json.data.issuing_ca }}"
+    dest: "{{ vault_listener_tls_cert_file }}"
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    mode: 0600
+  notify:
+    - Reload vault
+
+- name: tls - Create the vault listener TLS key
+  copy:
+    content: "{{ vault_tls_issue_resp.json.data.private_key }}"
+    dest: "{{ vault_listener_tls_key_file }}"
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    mode: 0600
+  notify:
+    - Reload vault
+
+# Update only the tls config items that can be updated via vault reload.
+# This presents the config file from being re-templated by accident.
+- name: tls - Update vault config value for tls_cert_file
+  lineinfile:
+    # ansible 2.3+ uses "path" instead of "name"
+    name: "{{ vault_config_file }}"
+    regexp: 'tls_cert_file'
+    line: "  tls_cert_file = \"{{ vault_listener_tls_cert_file }}\""
+  notify:
+    - Reload vault
+
+- name: tls - Update vault config value for tls_key_file
+  lineinfile:
+    # ansible 2.3+ uses "path" instead of "name"
+    name: "{{ vault_config_file }}"
+    regexp: 'tls_key_file'
+    line: "  tls_key_file = \"{{ vault_listener_tls_key_file }}\""
+  notify:
+    - Reload vault
+
+# The vault_tmp_ca_path directory is left behind to allow the tmp-ca
+# tasks to skip unnecessary tasks if re-run later.
+# https://fedoraproject.org/wiki/Features/SharedSystemCertificates
+- name: tls - Remove the tmp-ca trust file
+  file:
+    path: "{{ vault_tmp_ca_trust_file }}"
+    state: absent
+  register: trust_file_result
+
+- name: tls - Update the system trust store
+  command: >
+    update-ca-trust extract

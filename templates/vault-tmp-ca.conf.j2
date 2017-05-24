@@ -1,0 +1,31 @@
+[ ca ]
+default_ca = {{ vault_tmp_ca_name }}
+
+[ {{ vault_tmp_ca_name }} ]
+new_certs_dir = {{ vault_tmp_ca_path }}/certs
+unique_subject = no
+certificate = {{ vault_tmp_ca_cert }}
+private_key = {{ vault_tmp_ca_key }}
+database = {{ vault_tmp_ca_database }}
+serial = {{ vault_tmp_ca_serialfile }}
+default_days = {{ vault_tmp_ca_default_days }}
+default_md = sha1
+policy = {{ vault_tmp_ca_name }}_policy
+x509_extensions = {{ vault_tmp_ca_name }}_extensions
+copy_extensions = copy
+
+[ {{ vault_tmp_ca_name }}_policy ]
+commonName = supplied
+stateOrProvinceName = supplied
+countryName = supplied
+emailAddress = optional
+organizationName = supplied
+organizationalUnitName = optional
+
+[ {{ vault_tmp_ca_name }}_extensions ]
+basicConstraints = CA:false
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always
+subjectAltName = "{{ vault_tmp_ca_subject_alt_names | join(',') }}"
+keyUsage = digitalSignature,keyEncipherment
+extendedKeyUsage = serverAuth

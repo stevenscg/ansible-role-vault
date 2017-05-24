@@ -1,0 +1,96 @@
+---
+#
+# Default Role Variables for vault
+#
+# @see http://docs.ansible.com/playbooks_roles.html#roles
+#
+
+vault_version: 0.7.2
+vault_archive: "vault_{{ vault_version }}_linux_amd64.zip"
+vault_download: "https://releases.hashicorp.com/vault/{{ vault_version }}/{{ vault_archive }}"
+vault_checksum: sha256:22575dbb8b375ece395b58650b846761dffbf5a9dc5003669cafbb8731617c39
+vault_download_folder: /tmp
+
+vault_home: /opt/vault
+
+vault_config_dir: /etc/vault
+vault_config_file: /etc/vault/vault.hcl
+
+vault_user: vault
+vault_group: vault
+
+# This group is typically used with vault helper scripts where only certain users
+# or processes should have access to a directory or file.
+vault_users_group: vault-users
+
+vault_server: false
+
+vault_backend_type: consul
+vault_backend_consul_address: 127.0.0.1:8500
+vault_backend_consul_path: vault
+
+vault_listener_address: 0.0.0.0:8200
+vault_listener_tls_disable: false
+vault_listener_tls_certs_dir: "{{ vault_config_dir }}/certs"
+vault_listener_tls_cert_file: "{{ vault_listener_tls_certs_dir }}/vault.crt"
+vault_listener_tls_key_file:  "{{ vault_listener_tls_certs_dir }}/vault.key"
+
+vault_telemetry_enabled: true
+vault_telemetry_disable_hostname: true
+
+vault_init_gpg_required: true
+
+# API - the https url should be used whenever TLS is enabled
+# vault_base_url: https://{{ ansible_default_ipv4['address'] }}:8200
+vault_base_url: https://127.0.0.1:8200
+
+# temporary until we can figure out the issue resulting in:
+# "Failed to validate the SSL certificate for 10.0.2.15:8200.
+# Make sure your managed systems have a valid CA certificate installed.
+vault_api_validate_certs: no
+
+# Client configuration
+# vault_client_env_addr should be set to https://127.0.0.1:8200 on servers to ensure
+# that an administrator on the server instance can operate against the local vault server
+# process by default. This also helps avoid masking a sealed status on a local instance.
+vault_client_env_addr: https://active.vault.service.consul:8200
+# vault_client_env_token:
+# vault_client_env_cacert:
+
+# Temporary CA used for bootstrapping.
+# Once the vault is initialized and unsealed, the PKI backend should be used.
+vault_tmp_ca_path:   "{{ vault_home }}/tmp-ca"
+vault_tmp_ca_name:   vault_tmp_ca
+vault_tmp_ca_cert:   "{{ vault_tmp_ca_path }}/ca.crt"
+vault_tmp_ca_key:    "{{ vault_tmp_ca_path }}/ca.key"
+vault_tmp_ca_config:     "{{ vault_tmp_ca_path }}/vault-tmp-ca.conf"
+vault_tmp_ca_database:   "{{ vault_tmp_ca_path }}/certindex"
+vault_tmp_ca_serialfile: "{{ vault_tmp_ca_path }}/serialfile"
+vault_tmp_ca_default_days:     90
+vault_tmp_ca_subject_alt_name: "IP:127.0.0.1"
+vault_tmp_ca_trust_file: /etc/pki/ca-trust/source/anchors/vault_tmp_ca.crt
+
+vault_tmp_ca_subject_alt_names:
+  - "IP:127.0.0.1"
+  - "IP:{{ ansible_default_ipv4['address'] }}"
+  - "DNS:vault"
+  - "DNS:vault.service.consul"
+  - "DNS:active.vault.service.consul"
+  - "DNS:standby.vault.service.consul"
+
+vault_tls_csr: "{{ vault_tmp_ca_path }}/vault.csr"
+vault_tls_key: "{{ vault_tmp_ca_path }}/vault.key"
+vault_tls_crt: "{{ vault_tmp_ca_path }}/vault.crt"
+
+vault_tls_days:         90
+vault_tls_country:      US
+vault_tls_state:        Texas
+vault_tls_locality:     Dallas
+vault_tls_organization: MyOrg
+vault_tls_common_name:  vault
+
+vault_tls_subj_fields:  "/C={{ vault_tls_country }}/ST={{ vault_tls_state }}/L={{ vault_tls_locality }}/O={{ vault_tls_organization }}/CN={{ vault_tls_common_name }}"
+
+# Helpers
+vault_helper_dir: /opt/vault/helper
+vault_helper_ca_trust_file: /etc/pki/ca-trust/source/anchors/ca.crt

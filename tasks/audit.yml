@@ -1,0 +1,55 @@
+---
+#
+# Ansible tasks for the vault role
+#
+
+- name: audit - Get the current audit mounts
+  uri:
+    url: "{{ vault_base_url }}/v1/sys/audit"
+    method: GET
+    status_code: 200
+    validate_certs: "{{ vault_api_validate_certs }}"
+    headers:
+      X-Vault-Token: "{{ vault_token }}"
+  register: vault_audit_mounts
+
+- name: audit - Determine which audit mounts are updateable
+  set_fact:
+    vault_audit_mount_paths: "{{ vault_audit_mounts['json']['data'].keys() }}"
+
+- name: audit - Ensure the audit backends are mounted
+  uri:
+    url: "{{ vault_base_url }}/v1/sys/audit/{{ item.path }}"
+    method: PUT
+    status_code: 204
+    validate_certs: "{{ vault_api_validate_certs }}"
+    headers:
+      X-Vault-Token: "{{ vault_token }}"
+    body_format: json
+    body: "{{ item.parameters }}"
+  with_items: "{{ vault_audit_config | default([]) }}"
+  when: >
+    ( item is defined ) and
+    ( item.path is defined ) and
+    ( ( item.path + '/' ) not in vault_audit_mount_paths )
+  no_log: true
+
+# The url value is flexible to allow for mount tuning,
+# creating and updating config options or roles or policies.
+# - name: audit - Ensure the audit mounts are configured
+#   uri:
+#     url: "{{ vault_base_url }}/v1/{{ item.1.path }}"
+#     method: PUT
+#     status_code: "200,204"
+#     validate_certs: "{{ vault_api_validate_certs }}"
+#     headers:
+#       X-Vault-Token: "{{ vault_token }}"
+#     body_format: json
+#     body: "{{ item.1.data | to_json }}"
+#   with_subelements:
+#     - "{{ vault_audit_config | default([]) | selectattr('config', 'defined') | list }}"
+#     - config
+#   when: >
+#     ( item is defined ) and
+#     ( item.1.path is defined )
+#   no_log: true

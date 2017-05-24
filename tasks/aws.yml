@@ -1,0 +1,32 @@
+---
+#
+# Ansible tasks for the vault role
+#
+
+# Possible issue with run_once:
+# https://github.com/ansible/ansible/issues/13267
+
+# Note: This is only run once (on the first host in inventory)
+- name: Gather vault server instances
+  run_once: true
+  shell: >
+    aws ec2 describe-instances
+    --region {{ region }}
+    --filters "Name=instance-state-code,Values=16" "Name=tag:env,Values={{ env }}" "Name=tag:class,Values={{ vault_servers_via_tag }}"
+    --query "Reservations[].Instances[].PrivateIpAddress"
+    --output json
+  register: vault_instances_raw
+  changed_when: false
+  when: vault_servers_via_tag is defined
+
+- name: Register vault server addresses
+  set_fact:
+    vault_servers: "{{ vault_instances_raw.stdout | from_json }}"
+  when: vault_servers_via_tag is defined and vault_instances_raw is defined
+  changed_when: false
+  failed_when: vault_instances_raw.stdout == ''
+
+- name: Ensure that vault servers were found
+  fail:
+    msg: No vault servers found
+  when: vault_servers_via_tag is defined and vault_servers|length == 0

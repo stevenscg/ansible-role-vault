@@ -1,0 +1,20 @@
+---
+#
+# Ansible tasks for the vault role
+#
+
+# @TODO read each existing policy and attempt a diff between new and existing
+# before attempting to update.
+
+- name: policy - Ensure the vault policies are configured
+  uri:
+    url: "{{ vault_base_url }}/v1/sys/policy/{{ item.name }}"
+    method: POST
+    status_code: 204
+    validate_certs: "{{ vault_api_validate_certs }}"
+    headers:
+      X-Vault-Token: "{{ vault_token }}"
+    body: "{{ item.payload }}"
+    body_format: json
+  register: policy_debug
+  with_items: "{{ vault_policy_config | default([]) }}"

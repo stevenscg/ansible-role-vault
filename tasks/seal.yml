@@ -1,0 +1,31 @@
+---
+#
+# Ansible tasks for the vault role
+#
+
+- name: seal - Get the vault seal status
+  uri:
+    url: "{{ vault_base_url }}/v1/sys/seal-status"
+    method: GET
+    status_code: 200
+    validate_certs: "{{ vault_api_validate_certs }}"
+  register: vault_seal_status
+
+- name: seal - Register vault seal status
+  set_fact:
+    vault_sealed: "{{ vault_seal_status.json.sealed | bool }}"
+
+- name: seal - Ensure the vault is not already sealed
+  fail:
+    msg: Vault already sealed
+  when: vault_sealed
+
+- name: seal - Seal the vault
+  uri:
+    url: "{{ vault_base_url }}/v1/sys/seal"
+    method: PUT
+    status_code: 204
+    validate_certs: "{{ vault_api_validate_certs }}"
+    headers:
+      X-Vault-Token: "{{ vault_token }}"
+  when: not vault_sealed

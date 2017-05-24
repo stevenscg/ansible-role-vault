@@ -1,0 +1,109 @@
+---
+#
+# Ansible tasks for the vault role
+#
+
+- name: init - Get the vault initialization status
+  uri:
+    url: "{{ vault_base_url }}/v1/sys/init"
+    method: GET
+    validate_certs: "{{ vault_api_validate_certs }}"
+  register: vault_init_status
+
+- name: init - Register vault initialization status
+  set_fact:
+    vault_initialized: "{{ vault_init_status.json.initialized | bool }}"
+
+- name: init - Ensure GPG keys are available when required
+  fail:
+    msg: "vault_init_gpg_keys is required to initialize"
+  when: not vault_initialized and vault_init_gpg_required and ( vault_init_gpg_keys is not defined )
+
+- name: init - Ensure the vault_keys file is configured
+  fail:
+    msg: "vault_keys_file or vault_keys_file_local is required to initialize"
+  when: not vault_initialized and ( vault_keys_file is not defined ) and ( vault_keys_file_local is not defined )
+
+#
+# The request body is created from a template due to issues related to
+# the Ansible serialization of integer values which vault requires.
+# https://github.com/ansible/ansible/pull/10465
+# https://github.com/ansible/ansible/issues/13484
+# https://github.com/ansible/ansible-modules-core/issues/265
+# https://github.com/ansible/ansible-modules-core/pull/1011
+#
+# Specifically not using escalated privileges to avoid local file access issues
+# https://github.com/ansible/ansible/issues/14578
+#
+- name: init - Build the request body
+  local_action:
+    module: template
+    src: vault-req-init.json.j2
+    dest: /tmp/vault-req-init.json
+  become: no
+  when: not vault_initialized
+
+- name: init - Initialize the vault with GPG keys
+  uri:
+    url: "{{ vault_base_url }}/v1/sys/init"
+    method: PUT
+    return_content: yes
+    status_code: 200
+    validate_certs: "{{ vault_api_validate_certs }}"
+    body_format: json
+    body: '{{ lookup("file", "/tmp/vault-req-init.json") }}'
+    # body:
+    #   secret_shares: "{{ vault_init_secret_shares | default(1) | int }}"
+    #   secret_threshold: "{{ vault_init_secret_threshold | default(1) | int }}"
+    #   pgp_keys: "{{ vault_init_pgp_keys | default([]) }}"
+  register: vault_init_result_gpg
+  when: not vault_initialized and ( vault_init_gpg_keys is defined )
+
+- name: init - Write the vault_keys file with GPG keys
+  copy:
+    content: "{{ vault_init_result_gpg.json | to_nice_json }}"
+    dest: "{{ vault_keys_file }}"
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    mode: 0600
+  when: not vault_initialized and (vault_keys_file is defined) and not ( vault_init_result_gpg | skipped )
+
+- name: init - Write the local vault_keys file with GPG keys
+  local_action:
+    module: copy
+    content: "{{ vault_init_result_gpg.json | to_nice_json }}"
+    dest: "{{ vault_keys_file_local }}"
+  when: not vault_initialized and (vault_keys_file_local is defined) and not ( vault_init_result_gpg | skipped )
+  become: no
+
+- name: init - Initialize the vault without GPG keys
+  uri:
+    url: "{{ vault_base_url }}/v1/sys/init"
+    method: PUT
+    return_content: yes
+    status_code: 200
+    validate_certs: "{{ vault_api_validate_certs }}"
+    body_format: json
+    body: '{{ lookup("file", "/tmp/vault-req-init.json") }}'
+    # body:
+    #   secret_shares: "{{ vault_init_secret_shares | default(1) | int }}"
+    #   secret_threshold: "{{ vault_init_secret_threshold | default(1) | int }}"
+  register: vault_init_result_insecure
+  when: not vault_initialized and ( vault_init_gpg_keys is not defined )
+
+- name: init - Write the vault_keys file without GPG keys
+  copy:
+    content: "{{ vault_init_result_insecure.json | to_nice_json }}"
+    dest: "{{ vault_keys_file }}"
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    mode: 0600
+  when: not vault_initialized and (vault_keys_file is defined) and not ( vault_init_result_insecure | skipped )
+
+- name: init - Write the local vault_keys file without GPG keys
+  local_action:
+    module: copy
+    content: "{{ vault_init_result_insecure.json | to_nice_json }}"
+    dest: "{{ vault_keys_file_local }}"
+  when: not vault_initialized and (vault_keys_file_local is defined) and not ( vault_init_result_insecure | skipped )
+  become: no

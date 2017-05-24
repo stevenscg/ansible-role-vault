@@ -1,0 +1,58 @@
+---
+#
+# Ansible tasks for the vault role
+#
+
+# @TODO a HEAD call would be ideal here to determine if exists
+# @TODO a GET endpoint to lookup each mount would be good
+
+- name: mount - Get the current vault secret mounts
+  uri:
+    url: "{{ vault_base_url }}/v1/sys/mounts"
+    method: GET
+    status_code: 200
+    validate_certs: "{{ vault_api_validate_certs }}"
+    headers:
+      X-Vault-Token: "{{ vault_token }}"
+  register: vault_secret_mounts
+
+- name: mount - Determine which secret mounts are updateable
+  set_fact:
+    vault_secret_mount_paths: "{{ vault_secret_mounts['json']['data'].keys() }}"
+
+- name: mount - Ensure the secret mounts are mounted
+  uri:
+    url: "{{ vault_base_url }}/v1/sys/mounts/{{ item.path }}"
+    method: POST
+    status_code: 204
+    validate_certs: "{{ vault_api_validate_certs }}"
+    headers:
+      X-Vault-Token: "{{ vault_token }}"
+    body_format: json
+    body: "{{ item.parameters }}"
+  with_items: "{{ vault_mount_config | default([]) }}"
+  when: >
+    ( item is defined ) and
+    ( item.path is defined ) and
+    ( ( item.path + '/' ) not in vault_secret_mount_paths )
+  no_log: true
+
+# @TODO update parameters on existing mounts?
+
+- name: mount - Ensure the secret mounts are configured
+  uri:
+    url: "{{ vault_base_url }}/v1/{{ item.1.path }}"
+    method: POST
+    status_code: "200,204"
+    validate_certs: "{{ vault_api_validate_certs }}"
+    headers:
+      X-Vault-Token: "{{ vault_token }}"
+    body_format: json
+    body: "{{ item.1.data | to_json }}"
+  with_subelements:
+    - "{{ vault_mount_config | default([]) | selectattr('config', 'defined') | list }}"
+    - config
+  when: >
+    ( item is defined ) and
+    ( item.1.path is defined )
+  no_log: true

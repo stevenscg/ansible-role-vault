@@ -1,0 +1,12 @@
+{
+  "secret_shares": {{ vault_init_secret_shares | default(1) | int }},
+  "secret_threshold": {{ vault_init_secret_threshold | default(1) | int }}
+{% if vault_init_pgp_keys is defined %}
+,
+  "pgp_keys": [
+{% for pgp_key in vault_init_pgp_keys %}
+    "{{ pgp_key }}"{% if not loop.last %},{% endif %}
+{% endfor %}
+]
+{% endif %}
+}

@@ -1,0 +1,209 @@
+---
+#
+# Ansible tasks for the vault role
+#
+# This task generates temporary TLS certificates and certificate authority
+# that can be used during Vault setup and unsealing.
+#
+# WARNING: This is potentially destructive if the "tls.yml" plays have been run.
+#
+# http://dunne.io/vault-and-self-signed-ssl-certificates
+# https://gist.github.com/skippy/8c44e721fe7e2858bdd4a3b4d3e6d46b
+#
+# Checks:
+# openssl x509 -text -noout -in /tmp/vault/certs/0A.pem
+#
+
+- name: tmp-ca - Test for an existing directory structure
+  stat:
+    path: "{{ vault_tmp_ca_path }}"
+  register: vault_tmp_ca_check
+
+# Only run the tmp-ca tasks if the path does not exist or the operator
+# has defined the force install parameter.
+- block:
+    - name: tmp-ca - Ensure OpenSSL is installed
+      yum:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - openssl
+
+    - name: tmp-ca - Ensure vault group exists
+      group:
+        name: "{{ vault_group }}"
+        state: present
+
+    - name: tmp-ca - Ensure vault user exists
+      user:
+        name: "{{ vault_user }}"
+        group: "{{ vault_group }}"
+        system: yes
+
+    - name: tmp-ca - Ensure the ca path is removed when requested
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - "{{ vault_tmp_ca_path }}"
+      when:
+        - ( vault_tmp_ca_overwrite | default(false) )
+
+    - name: tmp-ca - Ensure the certificate path exists
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ vault_user }}"
+        group: "{{ vault_group }}"
+      with_items:
+        - "{{ vault_tmp_ca_path }}"
+        - "{{ vault_tmp_ca_path }}/certs"
+
+    - name: tmp-ca - Create the CA configuration file
+      template:
+        src: vault-tmp-ca.conf.j2
+        dest: "{{ vault_tmp_ca_config }}"
+        owner: "{{ vault_user }}"
+        group: "{{ vault_group }}"
+        mode: 0644
+
+    - name: tmp-ca - Generate the CA root certificate
+      command: >
+        openssl req -batch -newkey rsa:2048 -x509 -nodes
+        -days "{{ vault_tmp_ca_default_days }}"
+        -subj "{{ vault_tls_subj_fields }}"
+        -out "{{ vault_tmp_ca_cert }}"
+        -keyout "{{ vault_tmp_ca_key }}"
+      args:
+        creates: "{{ vault_tmp_ca_cert }}"
+
+    - name: tmp-ca - Test the CA serial file
+      stat:
+        path: "{{ vault_tmp_ca_serialfile }}"
+      register: vault_tls_serial_check
+
+    - name: tmp-ca - Create the CA serial file if it does not already exist
+      copy:
+        content: "000a"
+        dest: "{{ vault_tmp_ca_serialfile }}"
+      when: ( not vault_tls_serial_check.stat.exists )
+
+    - name: tmp-ca - Test the CA database file
+      stat:
+        path: "{{ vault_tmp_ca_database }}"
+      register: vault_tls_database_check
+
+    - name: tmp-ca - Create the CA database file if it does not already exist
+      copy:
+        content: ""
+        dest: "{{ item }}"
+      with_items:
+        - "{{ vault_tmp_ca_database }}"
+        - "{{ vault_tmp_ca_database }}.attr"
+      when: ( not vault_tls_database_check.stat.exists )
+  when: >
+    ( not vault_tmp_ca_check.stat.exists ) or
+    ( vault_tmp_ca_force_install is defined and vault_tmp_ca_force_install )
+
+#
+# WARNING - This is potentially destructive if the "tls.yml" plays have been run
+#           and when using the vault_tmp_ca_force_install parameter is defined.
+#
+- name: tmp-ca - Test for an existing vault listener key
+  stat:
+    path: "{{ vault_listener_tls_key_file }}"
+  register: vault_tmp_ca_key_check
+
+- name: tmp-ca - Test for an existing vault listener cert
+  stat:
+    path: "{{ vault_listener_tls_key_file }}"
+  register: vault_tmp_ca_crt_check
+
+- block:
+    # @TODO DO NOT put these in the system trust store.
+    # Instead, use VAULT_CACERT var for remaining steps until the pki backend is up.
+
+    # https://fedoraproject.org/wiki/Features/SharedSystemCertificates
+    - name: tmp-ca - Enable the system trust store
+      command: >
+        update-ca-trust enable
+
+    - name: tmp-ca - Copy the CA certificate to the system trust store
+      copy:
+        src: "{{ vault_tmp_ca_cert }}"
+        dest: "{{ vault_tmp_ca_trust_file }}"
+        remote_src: yes
+      register: trust_file_result
+
+    # https://fedoraproject.org/wiki/Features/SharedSystemCertificates
+    - name: tmp-ca - Add the CA certificate to the system trust store
+      command: >
+        update-ca-trust extract
+      when: trust_file_result | changed
+
+    - name: tmp-ca - Generate the vault listener tls csr and private key
+      command: >
+        openssl req -batch -newkey rsa:2048 -nodes
+        -subj "{{ vault_tls_subj_fields }}"
+        -out {{ vault_tls_csr }}
+        -keyout {{ vault_tls_key }}
+      args:
+        creates: "{{ vault_tls_csr }}"
+      register: vault_tls_key_result
+
+    - name: tmp-ca - Generate the vault listener tls certificate
+      command: >
+        openssl ca -batch -notext
+        -config {{ vault_tmp_ca_config }}
+        -in {{ vault_tls_csr }}
+        -out {{ vault_tls_crt }}
+      args:
+        creates: "{{ vault_tls_crt }}"
+      register: vault_tls_crt_result
+
+    # This is not used when the system trust store is used.
+    # - name: tmp-ca - Generate the combined certificate
+    #   shell: >
+    #     cat {{ vault_tmp_ca_cert }} >> {{ vault_tls_crt }}
+
+    - name: tmp-ca - Create vault config directory
+      file:
+        state: directory
+        path: "{{ vault_listener_tls_certs_dir }}"
+        owner: "{{ vault_user }}"
+        group: "{{ vault_group }}"
+
+    - name: tmp-ca - Copy the tmp vault listener TLS key
+      copy:
+        src:  "{{ vault_tls_key }}"
+        dest: "{{ vault_listener_tls_key_file }}"
+        owner: "{{ vault_user }}"
+        group: "{{ vault_group }}"
+        mode: 0600
+        remote_src: true
+      when: >
+        ( vault_tls_key_result | changed )
+
+    - name: tmp-ca - Copy the tmp vault listener TLS cert
+      copy:
+        src:  "{{ vault_tls_crt }}"
+        dest: "{{ vault_listener_tls_cert_file }}"
+        owner: "{{ vault_user }}"
+        group: "{{ vault_group }}"
+        mode: 0600
+        remote_src: true
+      when: >
+        ( vault_tls_crt_result | changed )
+
+    #
+    # @TODO after vault is initialized, unsealed, and pki mounted,
+    # replace this ca and SIGHUP to vault before continuing
+    # sudo pkill -HUP vault -or- notify the handler "Reload vault"
+    #
+    # - name: tmp-ca - Reload the vault configuration
+    #   command: pkill -HUP vault
+    #   when: trust_file_result | changed
+    #
+  when: >
+    ( not vault_tmp_ca_key_check.stat.exists and not vault_tmp_ca_crt_check.stat.exists ) or
+    ( vault_tmp_ca_force_install is defined and vault_tmp_ca_force_install )

@@ -1,0 +1,42 @@
+#
+# Systemd configuration for vault
+# {{ ansible_managed }}
+#
+# Notes:
+#   KillSignal=SIGINT is used to reload certain configuration items.
+#   Based on https://github.com/mterron/init-scripts/blob/master/consul.service
+#
+
+[Unit]
+Description=Vault
+Documentation=https://www.vaultproject.io/docs/
+# @TODO Verify that restarting a local consul agent does not trigger a restart of this service...
+# Requires=consul.service
+# After=network-online.target consul.service
+After=network-online.target
+
+[Service]
+User={{ vault_user }}
+Group={{ vault_group }}
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=read-only
+SecureBits=keep-caps
+Capabilities=CAP_IPC_LOCK+ep
+CapabilityBoundingSet=CAP_SYSLOG CAP_IPC_LOCK
+NoNewPrivileges=yes
+{% if vault_server_dev_mode | default(false) %}
+ExecStart={{ vault_home }}/bin/vault server -dev -dev-listen-address="{{ vault_server_dev_mode_listener_address | default('') }}" -dev-root-token-id="{{ vault_server_dev_mode_root_token | default('') }}"
+{% else %}
+ExecStart={{ vault_home }}/bin/vault server -config={{ vault_config_file }}
+{% endif %}
+ExecReload=/bin/kill -HUP $MAINPID
+KillSignal=SIGINT
+TimeoutStopSec=30s
+Restart=on-failure
+StartLimitInterval=60s
+StartLimitBurst=3
+
+[Install]
+WantedBy=multi-user.target

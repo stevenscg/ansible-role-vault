@@ -1,0 +1,77 @@
+#
+# Hashicorp Vault configuration
+# {{ ansible_managed }}
+#
+
+{% if vault_backend_type == "consul" %}
+backend "consul" {
+{% if vault_backend_consul_address is defined %}
+  address = "{{ vault_backend_consul_address }}"
+{% endif %}
+{% if vault_backend_redirect_addr is defined %}
+  redirect_addr = "{{ vault_backend_redirect_addr }}"
+{% endif %}
+{% if vault_backend_cluster_addr is defined %}
+  cluster_addr = "{{ vault_backend_cluster_addr }}"
+{% endif %}
+{% if vault_backend_consul_max_parallel is defined %}
+  max_parallel = "{{ vault_backend_consul_max_parallel }}"
+{% endif %}
+{% if vault_backend_consul_path is defined %}
+  path = "{{ vault_backend_consul_path }}"
+{% endif %}
+{% if vault_backend_consul_scheme is defined %}
+  scheme = "{{ vault_backend_consul_scheme }}"
+{% endif %}
+{% if vault_backend_consul_tls_ca_file is defined %}
+  tls_ca_file = "{{ vault_backend_consul_tls_ca_file }}"
+{% endif %}
+{% if vault_backend_consul_tls_cert_file is defined %}
+  tls_cert_file = "{{ vault_backend_consul_tls_cert_file }}"
+{% endif %}
+{% if vault_backend_consul_tls_key_file is defined %}
+  tls_key_file = "{{ vault_backend_consul_tls_key_file }}"
+{% endif %}
+{% if vault_backend_consul_tls_skip_verify is defined and vault_backend_tls_consul_skip_verify %}
+  tls_skip_verify = true
+{% endif %}
+{% if vault_backend_consul_token is defined %}
+  token = "{{ vault_backend_consul_token }}"
+{% endif %}
+}
+{% endif %}
+
+listener "tcp" {
+{% if vault_listener_address is defined %}
+  address = "{{ vault_listener_address }}"
+{% endif %}
+{% if vault_listener_cluster_address is defined %}
+  cluster_address = "{{ vault_listener_cluster_address }}"
+{% endif %}
+{% if vault_listener_tls_disable is defined and vault_listener_tls_disable %}
+  tls_disable = 1
+{% endif %}
+{% if vault_listener_tls_cert_file is defined %}
+  tls_cert_file = "{{ vault_listener_tls_cert_file }}"
+{% endif %}
+{% if vault_listener_tls_key_file is defined %}
+  tls_key_file = "{{ vault_listener_tls_key_file }}"
+{% endif %}
+{% if vault_listener_tls_min_version is defined %}
+  tls_min_version = "{{ vault_listener_tls_min_version }}"
+{% endif %}
+}
+
+{% if vault_telemetry_enabled %}
+telemetry {
+{%   if vault_telemetry_disable_hostname is defined and vault_telemetry_disable_hostname %}
+  disable_hostname = true
+{%   endif %}
+{%   if vault_telemetry_statsd_address is defined %}
+  statsd_address = "{{ vault_telemetry_statsd_address }}"
+{%   endif %}
+{%   if vault_telemetry_statsite_address is defined %}
+  statsite_address = "{{ vault_telemetry_statsite_address }}"
+{%   endif %}
+}
+{% endif %}

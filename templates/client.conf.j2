@@ -1,0 +1,11 @@
+#
+# Vault client/helper configuration
+# {{ ansible_managed }}
+#
+
+{% if vault_client_env_addr is defined %}
+export VAULT_ADDR={{ vault_client_env_addr }}
+{% endif %}
+{% if vault_client_env_role is defined %}
+export VAULT_ROLE={{ vault_client_env_role }}
+{% endif %}

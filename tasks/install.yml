@@ -1,0 +1,116 @@
+---
+#
+# Ansible tasks for the vault role
+#
+
+- name: install - Ensure dependencies are installed
+  yum:
+    name: "{{ item }}"
+    state: installed
+  with_items:
+    - unzip
+    - jq
+
+- name: install - Ensure python-based dependencies are installed
+  pip:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - pyhcl
+    - python-consul
+
+- name: install - Download vault
+  get_url:
+    url: "{{ vault_download }}"
+    dest: "{{ vault_download_folder }}"
+    checksum: "{{ vault_checksum }}"
+  register: vault_was_downloaded
+
+- name: install - Create vault directories
+  file:
+    state: directory
+    path: "{{ item }}"
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+  with_items:
+    - "{{ vault_home }}"
+    - "{{ vault_home }}/bin"
+
+- name: Check if the vault binary exists
+  stat:
+    path: "{{ vault_home }}/bin/vault"
+  register: vault_check_binary
+
+- name: install - Copy and unpack
+  unarchive:
+    src: "{{ vault_download_folder }}/{{ vault_archive }}"
+    dest: "{{ vault_home }}/bin"
+    copy: no
+  when: vault_was_downloaded|changed or not vault_check_binary.stat.exists
+
+- name: install - Set ownership
+  file:
+    state: directory
+    path: "{{ vault_home }}"
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    recurse: yes
+  when: vault_was_downloaded|changed
+
+- name: install - Set vault environment variables
+  template:
+    src: vault.env.j2
+    dest: /etc/profile.d/vault.sh
+    owner: root
+    group: root
+    mode: 0644
+
+# Only vault servers use or need a configuration file.
+# For clients, see the vault_client_env_* variables in defaults/main.yml.
+- block:
+    - name: install - Create vault server configuration directory
+      file:
+        state: directory
+        path: "{{ item }}"
+        owner: "{{ vault_user }}"
+        group: "{{ vault_group }}"
+      with_items:
+        - "{{ vault_config_dir }}"
+
+    # Note: Keep this play synced with the same play in tls.
+    - name: install - Install vault config
+      template:
+        src: vault.hcl.j2
+        dest: "{{ vault_config_file }}"
+        owner: "{{ vault_user }}"
+        group: "{{ vault_group }}"
+        mode: 0600
+
+    - name: install - Check if vault server has mlock enabled
+      shell: >
+        getcap $(readlink -f $(which {{ vault_home }}/bin/vault))
+      register: vault_server_check_mlock
+      changed_when: false
+
+    - name: install - Allow vault server to use mlock
+      shell: >
+        setcap cap_ipc_lock=+ep $(readlink -f $(which {{ vault_home }}/bin/vault))
+      when: vault_server and ( 'cap_ipc_lock' not in vault_server_check_mlock.stdout)
+
+    - name: Create the vault systemd service
+      template:
+        src: systemd.service.j2
+        dest: /etc/systemd/system/vault.service
+        owner: root
+        group: root
+        mode: 0644
+      register: vault_systemd_service
+
+    - name: Ensure vault is started and enabled at boot
+      systemd:
+        name: vault
+        state: started
+        enabled: yes
+        daemon_reload: yes
+      when: vault_systemd_service|changed
+  when: vault_server is defined and vault_server

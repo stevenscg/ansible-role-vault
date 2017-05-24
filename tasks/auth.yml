@@ -1,0 +1,54 @@
+---
+#
+#
+
+- name: auth - Get the current vault auth backends
+  uri:
+    url: "{{ vault_base_url }}/v1/sys/auth"
+    method: GET
+    status_code: 200
+    validate_certs: "{{ vault_api_validate_certs }}"
+    headers:
+      X-Vault-Token: "{{ vault_token }}"
+  register: vault_auth_mounts
+
+- name: auth - Determine which auth mounts are updateable
+  set_fact:
+    vault_auth_mount_paths: "{{ vault_auth_mounts['json']['data'].keys() }}"
+
+- name: auth - Ensure the auth backends are mounted
+  uri:
+    url: "{{ vault_base_url }}/v1/sys/auth/{{ item.path }}"
+    method: POST
+    status_code: 204
+    validate_certs: "{{ vault_api_validate_certs }}"
+    headers:
+      X-Vault-Token: "{{ vault_token }}"
+    body_format: json
+    body: "{{ item.parameters }}"
+  with_items: "{{ vault_auth_config | default([]) }}"
+  when: >
+    ( item is defined ) and
+    ( item.path is defined ) and
+    ( ( item.path + '/' ) not in vault_auth_mount_paths )
+  no_log: true
+
+# The url value is flexible to allow for mount tuning,
+# creating and updating config options or roles or policies.
+- name: auth - Ensure the auth backends are configured
+  uri:
+    url: "{{ vault_base_url }}/v1/{{ item.1.path }}"
+    method: POST
+    status_code: "200,204"
+    validate_certs: "{{ vault_api_validate_certs }}"
+    headers:
+      X-Vault-Token: "{{ vault_token }}"
+    body_format: json
+    body: "{{ item.1.data | to_json }}"
+  with_subelements:
+    - "{{ vault_auth_config | default([]) | selectattr('config', 'defined') | list }}"
+    - config
+  when: >
+    ( item is defined ) and
+    ( item.1.path is defined )
+  no_log: true

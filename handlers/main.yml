@@ -1,0 +1,19 @@
+#
+# Handlers for vault
+#
+# @see http://docs.ansible.com/playbooks_intro.html#handlers-running-operations-on-change
+#
+# Notes:
+#  "Notify handlers are always run in the order written."
+#  These use sudo since deploys are commonly performed without sudo
+#
+---
+
+- name: Reload vault
+  become: yes
+  command: pkill -HUP vault
+
+- name: Restart vault
+  service:
+    name: vault
+    state: restarted

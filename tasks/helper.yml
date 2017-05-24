@@ -1,0 +1,10 @@
+---
+#
+# Ansible tasks for the vault role
+#
+
+- include: helpers/dev-auth.yml
+  when: ( "dev-auth" in vault_helpers )
+
+- include: helpers/ec2-auth.yml
+  when: ( "ec2-auth" in vault_helpers )

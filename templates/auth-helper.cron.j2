@@ -1,0 +1,20 @@
+#!/bin/sh
+#
+# Cron jobs for vault helpers
+# {{ ansible_managed }}
+#
+
+# Cron Options
+SHELL=/bin/sh
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin
+THISDIR=$(cd `dirname $0` && pwd)
+
+{% if "dev-auth" in vault_helpers %}
+@reboot root {{ vault_helper_dir }}/dev-auth.sh 2>&1 | /usr/bin/logger -t dev-auth-helper
+@daily  root {{ vault_helper_dir }}/dev-auth.sh 2>&1 | /usr/bin/logger -t dev-auth-helper
+{% endif %}
+
+{% if "ec2-auth" in vault_helpers %}
+@reboot root {{ vault_helper_dir }}/ec2-auth.sh 2>&1 | /usr/bin/logger -t ec2-auth-helper
+@daily  root {{ vault_helper_dir }}/ec2-auth.sh 2>&1 | /usr/bin/logger -t ec2-auth-helper
+{% endif %}

@@ -1,0 +1,78 @@
+---
+#
+# Ansible tasks for the vault role
+#
+
+
+# - include: aws.yml
+
+# Set this as a fact
+- name: main - Set the vault API base url
+  set_fact:
+    vault_base_url: "{{ vault_base_url }}"
+  when: ( vault_base_url is not defined )
+
+#
+# @TODO watch for dynamic includes to be fixed in Ansible 2.X (possibly with v2.1.2)
+# https://github.com/ansible/ansible/issues/12793
+# https://github.com/ansible/ansible/commit/892d9b8dfbbbae586f64af99df1bcc05ec7077a5
+#
+
+# Installs vault and vault_users
+- include: users.yml
+  when: ( "users" in vault_actions )
+
+# Setup a temporary CA and TLS certificates for bootstrapping vault servers.
+# WARNING: This is potentially destructive if the "tls.yml" plays have been run.
+- include: tmp-ca.yml
+  when: ( "tmp-ca" in vault_actions )
+
+# Installs vault client and/or server
+- include: install.yml
+  when: ( "install" in vault_actions )
+
+# Initializes the vault and writes the unseal keys
+# to the vault_keys_file on the control matchine
+- include: init.yml
+  when: ( "init" in vault_actions )
+
+# Unseals the vault
+- include: unseal.yml
+  when: ( "unseal" in vault_actions )
+
+# Loads a token from the local environment (preferred)
+# or the root_token from a vault_keys_file
+- include: token.yml
+  when: ( "token" in vault_actions )
+
+# Configures the desired audit backends
+- include: audit.yml
+  when: ( "audit" in vault_actions )
+
+# Configures the desired auth backends
+- include: auth.yml
+  when: ( "auth" in vault_actions )
+
+# Configures the required auth policies
+- include: policy.yml
+  when: ( "policy" in vault_actions )
+
+# Mounts the desired secret backends
+- include: mount.yml
+  when: ( "mount" in vault_actions )
+
+# Loads the specified secrets (or stubs)
+- include: secret.yml
+  when: ( "secret" in vault_actions )
+
+# Configures the desired helpers for instance token management, etc.
+- include: helper.yml
+  when: ( "helper" in vault_actions )
+
+# Configures the vault listener for TLS
+- include: tls.yml
+  when: ( "tls" in vault_actions )
+
+# Seals the vault (USE CAREFULLY!)
+- include: seal.yml
+  when: ( "seal" in vault_actions )

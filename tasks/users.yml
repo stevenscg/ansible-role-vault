@@ -1,0 +1,31 @@
+---
+#
+# Ansible tasks for the vault role
+#
+
+# This user and group is for the vault agent and server processes.
+- name: users - Ensure vault group exists
+  group:
+    name: "{{ vault_group }}"
+    state: present
+
+- name: users - Ensure vault user exists
+  user:
+    name: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    system: yes
+
+# This group is typically installed and used with vault helper scripts
+# where only certain users or processes should have access to a directory
+# or file.
+- name: users - Ensure vault-users group exists
+  group:
+    name: "{{ vault_users_group }}"
+    state: present
+
+- name: users - Ensure vault-users group is populated
+  user:
+    name: "{{ item }}"
+    append: yes
+    groups: "{{ vault_users_group }}"
+  with_items: "{{ vault_users_users | default([]) }}"
